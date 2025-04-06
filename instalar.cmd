@@ -2,17 +2,13 @@
 setlocal enabledelayedexpansion
 
 :: Verificar permisos de administrador
->nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
+net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo ========================================
     echo       ELEVANDO PERMISOS DE ADMINISTRADOR
     echo ========================================
     
-    echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
-    echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
-    
-    "%temp%\getadmin.vbs"
-    del "%temp%\getadmin.vbs"
+    powershell -Command "Start-Process cmd.exe -ArgumentList '/c %~dpnx0' -Verb RunAs"
     exit /b
 )
 
@@ -105,56 +101,63 @@ if %errorlevel% equ 0 (
     echo No se detecto tarjeta NVIDIA compatible. Se usara CPU para procesar imagenes.
 )
 
-:: Instalar otras dependencias
-echo.
+:: Instalar otras dependencias adicionales si es necesario (opcional)
 echo Instalando dependencias adicionales...
-python -m pip install concurrent-futures gc filecmp difflib
+python -m pip install gc filecmp difflib
 
-:: Crear directorio de instalacion
+:: Crear directorio de instalacion en el perfil del usuario
 set "INSTALL_DIR=%USERPROFILE%\ReduccionImagenes"
 mkdir "%INSTALL_DIR%" 2>nul
 
-:: Copiar script principal
+:: Copiar script principal y archivos adicionales necesarios al directorio de instalacion
 echo Copiando archivos...
-copy "%~dp0image_reducer.py" "%INSTALL_DIR%\reductor_imagenes.py"
+copy "%~dp0data\icono.ico" "%INSTALL_DIR%\icono.ico"
+copy "%~dp0data\reductor_imagenes.py" "%INSTALL_DIR%\reductor_imagenes.py"
+copy "%~dp0data\menu_agregar.py" "%INSTALL_DIR%\menu_agregar.py"
+copy "%~dp0data\menu_remover.py" "%INSTALL_DIR%\menu_remover.py"
+copy "%~dp0leeme.txt" "%INSTALL_DIR%\leeme.txt"
 
-:: Copiar icono si existe
-if exist "%~dp0icono.ico" (
-    copy "%~dp0icono.ico" "%INSTALL_DIR%\icono.ico"
-) else (
-    :: Crear un icono basico si no existe
-    echo Creando icono por defecto...
-    powershell -Command "$webClient = New-Object System.Net.WebClient; $webClient.DownloadFile('https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/Photo/SVG/ic_fluent_photo_24_regular.svg', '%INSTALL_DIR%\icon.svg'); [System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('%SYSTEMROOT%\System32\mspaint.exe'); $icon.ToBitmap().Save('%INSTALL_DIR%\icono.ico', [System.Drawing.Imaging.ImageFormat]::Icon)" >nul 2>&1
-)
-
-:: Crear script de inicio con elevacion de permisos
+:: Crear script iniciar_reductor.cmd con menú interactivo y funcionalidad adicional:
+:: Crear script de inicio con PowerShell para elevación de permisos
 echo @echo off > "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo :: Script para iniciar el reductor de imagenes con permisos de administrador >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo setlocal enabledelayedexpansion >> "%INSTALL_DIR%\iniciar_reductor.cmd"
 echo. >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo ^>nul 2^>^&1 "%%SYSTEMROOT%%\system32\cacls.exe" "%%SYSTEMROOT%%\system32\config\system" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo if %%errorlevel%% neq 0 ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo     echo Set UAC = CreateObject^("Shell.Application"^) ^> "%%temp%%\getadmin.vbs" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo     echo UAC.ShellExecute "%%~s0", "", "", "runas", 1 ^>^> "%%temp%%\getadmin.vbs" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo     "%%temp%%\getadmin.vbs" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo     del "%%temp%%\getadmin.vbs" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo     exit /b >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo :: Verificar si hay argumentos >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo if "%%~1"=="" ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     :MENU >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     cls >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo ============================================ >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo    MENU REDUCTOR DE IMAGENES >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo ============================================ >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo. >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo   A: Instalar "Reducir Imagenes" en menu contextual >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo   B: Desinstalar del menu contextual >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo   0: Salir >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     echo. >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     set /p opcion="Seleccione una opcion: " >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     if /i "^!opcion^!"=="A" ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         python "%%~dp0menu_agregar.py" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         pause >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     ) else if /i "^!opcion^!"=="B" ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         python "%%~dp0menu_remover.py" >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         pause >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     ) else if "^!opcion^!"=="0" ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         exit /b 0 >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     ) else ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         echo Opcion invalida. Presione cualquier tecla para continuar... >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         pause ^> nul >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo         goto MENU >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     ) >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo ) else ( >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     python "%%~dp0reductor_imagenes.py" %%* >> "%INSTALL_DIR%\iniciar_reductor.cmd"
+echo     pause >> "%INSTALL_DIR%\iniciar_reductor.cmd"
 echo ) >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo. >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo :: Iniciar aplicacion >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo python "%%~dp0reductor_imagenes.py" %%* >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo. >> "%INSTALL_DIR%\iniciar_reductor.cmd"
-echo pause >> "%INSTALL_DIR%\iniciar_reductor.cmd"
 
-:: Crear acceso directo al script de inicio
-powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\Reductor Imagenes.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\iniciar_reductor.cmd'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; if (Test-Path '%INSTALL_DIR%\icono.ico') { $Shortcut.IconLocation = '%INSTALL_DIR%\icono.ico' }; $Shortcut.Save()"
 
-:: Tambien crear el menu contextual automaticamente
-echo Configurando menu contextual...
-reg add "HKCR\Directory\shell\ReducirImagenes" /ve /t REG_SZ /d "Reducir Imagenes" /f
-reg add "HKCR\Directory\shell\ReducirImagenes" /v "Icon" /t REG_SZ /d "%INSTALL_DIR%\icono.ico" /f
-reg add "HKCR\Directory\shell\ReducirImagenes\command" /ve /t REG_SZ /d "cmd /c \"%INSTALL_DIR%\iniciar_reductor.cmd\" \"%%1\"" /f
+:: Crear acceso directo al script iniciar_reductor en el escritorio del usuario:
+powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\\Desktop\\Reductor Imagenes.lnk'); $Shortcut.TargetPath = '%WINDIR%\\System32\\cmd.exe'; $Shortcut.Arguments = '/c \"%INSTALL_DIR%\\iniciar_reductor.cmd\"'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.IconLocation = '%SYSTEMROOT%\\System32\\shell32.dll,13'; $Shortcut.Save()"
 
-:: Mensaje final
+:: Mensaje final de instalacion:
 echo.
 echo =================================================================
 echo Instalacion completada con exito

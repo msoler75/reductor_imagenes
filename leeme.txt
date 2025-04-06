@@ -1,0 +1,95 @@
+# Especificación Técnica: Reductor de Imágenes
+
+## Descripción General
+Aplicación para reducir automáticamente imágenes grandes en carpetas y subcarpetas, creando copias optimizadas manteniendo la estructura original. La herramienta debe integrarse con el menú contextual de Windows y proporcionar notificaciones sobre el progreso.
+
+## Instalación
+Se instala mediante un comando de tipo PowerShell. Este script se encarga de instalar python y todas las dependencias necesarias, así como crear un acceso directo en el escritorio y un menú contextual en las carpetas. Para ejecutar el script, simplemente ejecutarlo.
+
+- El script se auto-ejecutará con permisos de administrador, cuando sea necesario.
+- El script creará un directorio en el usuario personal llamado "ReduccionImagenes" donde se instalará el programa.
+- El script copiará el programa principal en el directorio de instalación.
+- El script creará un acceso directo a un programa en Python en el escritorio llamado "Reductor Imagenes", que apunta a un script en python.
+
+- Si se ejecuta "Reductor Imagenes" del escritorio, aparecerá un menú donde da las opciones de A. instalación y B. desinstalación. 
+- Si el usuario elige la opción "A. Instalar", el script creará una entrada en el registro de Windows para el menú contextual en las carpetas llamado "Reducir Imagenes", con el icono del programa.
+- Si el usuario elige la opción "B. Desinstalar", el script eliminará la entrada del registro de Windows y eliminará el menú contextual.
+
+## Funcionalidades Principales
+
+### 1. Procesamiento de Imágenes
+- **Reducción de tamaño**: Redimensionar imágenes mayores a 1920px (sea por ancho o por alto que supere esa dimensión) manteniendo proporción
+- **Formatos soportados**: JPG, PNG, GIF, BMP, TIF, Convirtiendo todas las imágenes a JPG cuando sea necesario
+- **Aceleración por hardware**: Implementar soporte para GPU NVIDIA mediante CUDA, si está disponible
+- **Manejo de errores de memoria**: Implementar fallback progresivo para imágenes problemáticas. En tal caso se utilizará el método de reducción de progresivo.
+- **Procesamiento en paralelo**: Utilizar multithreading para optimizar rendimiento
+
+### 2. Gestión de Carpetas
+- **Detección inteligente**: Solo se procesarán las imagenes que superen la dimensión 1980 sea por alto o por ancho. El resto de documentos se copiarán sin cambios.
+- **Creación de carpetas copia destino**: Se creará una carpeta con el mismo nombre que la carpeta origen pero añadiendole "- g -" al final. Mantendrá la estructura original de la carpeta con sus subcarpetas.
+- Las subcarpetas, en la nueva destinación, también se les añadirá el sufijo "- g -".
+- **Nomenclatura de carpetas destino**:
+  - Carpeta normal → Añadir "- g -" (ej: "Fotos" → "Fotos - g -")
+  - Si la carpeta original o subcarpeta, ya tiene un sufijo "- g -" → Añadir otro "- g -" (ej: "Fotos - g -" → "Fotos - g - g -") 
+  - Carpeta terminada en guión → Añadir "- g -" (ej: "Fotos-" → "Fotos-- g -")
+- **Preservación de estructura**: Mantener jerarquía de subcarpetas en la copia
+- **Registro de procesamiento**: Crear un archivo de registro en la carpeta padre donde se registran los archivos procesados, los copiados (no son imágenes, o son imágenes pequeñas) y los errores.
+
+### 3. Características de la Interfaz
+- **Menú contextual de Windows**: Integración con clic derecho en carpetas
+- **Notificaciones**: Mostrar notificaciones en tray icon de Windows sobre progreso y finalización
+- **Consola de progreso**: Indicar porcentaje de avance durante el procesamiento
+- **Informes de resultados**: Mostrar estadísticas al finalizar (archivos procesados, reducidos, errores)
+
+### 4. Verificación y Validación
+- **Comparación de carpetas**: Verificar que origen y destino tengan el mismo número de archivos
+- **Detección de diferencias**: Identificar y reportar archivos con contenido diferente
+- **Manejo de errores**: Registro detallado de excepciones durante el procesamiento
+
+## Especificaciones Técnicas
+
+### Requerimientos de Sistema
+- Windows (7/8/10/11)
+- Python 3.6+
+- Dependencias: Pillow, PyQt5
+- Opcional: PyTorch/CUDA para aceleración GPU
+
+### Estructura del Instalador
+- Script de instalación (.cmd) que:
+  - Verifica instalación de Python y pip
+  - Instala dependencias necesarias
+  - Crea directorio de instalación en %USERPROFILE%\ReduccionImagenes
+  - Copia archivos de programa e icono
+  - Crea acceso directo en el escritorio
+  - Configura integración con menú contextual
+
+### Estructura del Programa
+- **Clase principal**: `ImageReducer` para gestionar todo el proceso de reducción
+- **Métodos de reducción**: Implementar variantes CPU y GPU (CUDA)
+- **Sistema de logging**: Registro detallado de operaciones y errores
+- **Integración con Windows**: Registro en menú contextual mediante winreg
+- **Privilegios**: Solicitar elevación a administrador cuando sea necesario
+
+## Flujo de Funcionamiento
+1. Usuario hace clic derecho en una carpeta y selecciona "Reducir Imágenes"
+2. La aplicación analiza si la carpeta contiene imágenes grandes
+3. Si contiene imágenes grandes:
+   - Crea carpeta destino con nomenclatura adecuada
+   - Procesa y reduce imágenes, copia el resto de archivos
+   - Muestra progreso y notificaciones
+4. Si no contiene imágenes grandes:
+   - Informa al usuario que no es necesario reducir
+   - Crea carpeta destino con nomenclatura "--"
+5. Al finalizar, muestra estadísticas, actualiza registro y notifica al usuario
+
+## Personalización y Opciones Adicionales
+- Menú de instalación/desinstalación del menú contextual
+- Detección automática de hardware GPU
+- Visualización de estadísticas de procesamiento
+- Comparación detallada entre carpetas origen y destino
+
+## Consideraciones Importantes
+- Manejo eficiente de memoria para imágenes muy grandes
+- Preservación de metadatos de las imágenes cuando sea posible
+- Fallback a métodos alternativos si la reducción estándar falla
+- Limpieza de recursos para evitar memory leaks

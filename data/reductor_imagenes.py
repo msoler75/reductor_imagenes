@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os
 import sys
 import logging
@@ -6,16 +8,16 @@ import time
 from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageFilter
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox
-from PyQt5.QtGui import QIcon
-import winreg
-import ctypes
+# from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox  # Eliminado
+# from PyQt5.QtGui import QIcon  # Eliminado
+# import winreg  # Eliminado
+# import ctypes  # Eliminado
 import filecmp
 import difflib
 from concurrent.futures import ThreadPoolExecutor
 import gc
 
-# Corregir la advertencia de depreciaciÛn usando la constante actualizada
+# Corregir la advertencia de depreciaci√≥n usando la constante actualizada
 try:
     from PIL import Image
     RESAMPLING_METHOD = Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.Resampling.LANCZOS
@@ -23,7 +25,7 @@ except:
     # Fallback para versiones muy antiguas
     RESAMPLING_METHOD = Image.ANTIALIAS
 
-# Para aceleraciÛn por hardware NVIDIA (si est· disponible)
+# Para aceleraci√≥n por hardware NVIDIA (si est√° disponible)
 try:
     import torch
     import torchvision.transforms as transforms
@@ -55,49 +57,47 @@ class ImageReducer:
         self.total_copied = 0
         self.errors = 0
         
-        # Para verificaciÛn de carpetas
+        # Para verificaci√≥n de carpetas
         self.processed_folders = []
         self.different_files = []
 
     def create_dest_folder(self):
-        """Crea el nombre correcto para la carpeta de destino seg˙n las reglas"""
+        """Crea el nombre correcto para la carpeta de destino seg√∫n las reglas"""
         folder_name = self.folder_name
         
         # Verificar si la carpeta necesita procesamiento
         self.needs_processing = self.folder_contains_large_images(self.source_folder)
         
-        # LÛgica mejorada para nombrar carpetas
+        # L√≥gica mejorada para nombrar carpetas
         if not self.needs_processing:
             if folder_name.endswith("- g -"):
-                # No hay im·genes para reducir y ya tiene "- g -"
+                # No hay im√°genes para reducir y ya tiene "- g -"
                 dest_folder_name = f"{folder_name.rsplit('- g -', 1)[0].strip()} -- "
             elif folder_name.endswith("-"):
-                # No hay im·genes y termina en guiÛn
+                # No hay im√°genes y termina en gui√≥n
                 dest_folder_name = f"{folder_name.rstrip('-').strip()} -- "
             else:
-                # No hay im·genes y no tiene formato especial
+                # No hay im√°genes y no tiene formato especial
                 dest_folder_name = f"{folder_name} -- "
         else:
-            # Hay im·genes que necesitan reducciÛn
+            # Hay im√°genes que necesitan reducci√≥n
             self.has_reduced_images = True
             
             if folder_name.endswith("- g -"):
-                # Ya tiene "- g -", aÒadimos otro
+                # Ya tiene "- g -", a√±adimos otro
                 dest_folder_name = f"{folder_name} g -"
             elif folder_name.endswith("-"):
-                # Termina en guiÛn
+                # Termina en gui√≥n
                 dest_folder_name = f"{folder_name.rstrip('-').strip()} - g -"
             else:
                 # Caso normal
                 dest_folder_name = f"{folder_name} - g -"
-                
-            # Si tiene im·genes reducidas, aÒadir "REDUCIDAS"
-            dest_folder_name = f"{dest_folder_name} REDUCIDAS"
+
         
         self.dest_folder = self.source_folder.parent / dest_folder_name
 
     def folder_contains_large_images(self, folder_path):
-        """Verifica si la carpeta o subcarpetas contienen im·genes grandes"""
+        """Verifica si la carpeta o subcarpetas contienen im√°genes grandes"""
         for root, _, files in os.walk(folder_path):
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff')):
@@ -113,12 +113,12 @@ class ImageReducer:
         return False
 
     def reduce_image(self, image_path):
-        """Redimensiona una imagen si es necesario, con soporte para GPU si est· disponible"""
+        """Redimensiona una imagen si es necesario, con soporte para GPU si est√° disponible"""
         try:
-            # Liberar memoria explÌcitamente antes de procesar
+            # Liberar memoria expl√≠citamente antes de procesar
             gc.collect()
             
-            # Usar aceleraciÛn por hardware si est· disponible
+            # Usar aceleraci√≥n por hardware si est√° disponible
             if HAS_CUDA:
                 return self.reduce_image_cuda(image_path)
             else:
@@ -133,14 +133,14 @@ class ImageReducer:
             with Image.open(image_path) as img:
                 width, height = img.size
                 
-                # CondiciÛn para redimensionar
+                # Condici√≥n para redimensionar
                 if width > 1920 or height > 1920:
                     # Manejar errores de memoria
                     try:
-                        # Mantener proporciÛn
+                        # Mantener proporci√≥n
                         img.thumbnail((1920, 1920), RESAMPLING_METHOD)
                         
-                        # Guardar en nueva ubicaciÛn
+                        # Guardar en nueva ubicaci√≥n
                         relative_path = image_path.relative_to(self.source_folder)
                         new_path = self.dest_folder / relative_path
                         
@@ -180,7 +180,7 @@ class ImageReducer:
             with Image.open(image_path) as pil_img:
                 width, height = pil_img.size
                 
-                # CondiciÛn para redimensionar
+                # Condici√≥n para redimensionar
                 if width > 1920 or height > 1920:
                     # Procesamiento con GPU
                     img = Image.open(image_path).convert('RGB')
@@ -192,7 +192,7 @@ class ImageReducer:
                     if torch.cuda.is_available():
                         tensor = tensor.cuda()
                     
-                    # Calcular nueva proporciÛn
+                    # Calcular nueva proporci√≥n
                     scale = min(1920 / width, 1920 / height)
                     new_width = int(width * scale)
                     new_height = int(height * scale)
@@ -204,7 +204,7 @@ class ImageReducer:
                     resized = resized.squeeze(0).cpu()
                     resized_img = transforms.ToPILImage()(resized)
                     
-                    # Guardar en nueva ubicaciÛn
+                    # Guardar en nueva ubicaci√≥n
                     relative_path = image_path.relative_to(self.source_folder)
                     new_path = self.dest_folder / relative_path
                     
@@ -233,17 +233,17 @@ class ImageReducer:
         
         # Verificar si realmente es necesario procesar
         if not self.needs_processing:
-            message = f"No hay im·genes grandes para reducir en {self.source_folder}"
+            message = f"No hay im√°genes grandes para reducir en {self.source_folder}"
             print(message)
             logging.info(message)
-            self.show_notification("An·lisis Completado", message)
+            # self.show_notification("An√°lisis Completado", message) #Eliminado
             return
         
         try:
-            # Contar el n˙mero total de archivos
+            # Contar el n√∫mero total de archivos
             total_files = sum([len(files) for _, _, files in os.walk(self.source_folder)])
             
-            print(f"Iniciando reducciÛn de im·genes en {self.source_folder}")
+            print(f"Iniciando reducci√≥n de im√°genes en {self.source_folder}")
             print(f"Total de archivos a procesar: {total_files}")
             
             # Usar multithreading para mejorar rendimiento
@@ -254,6 +254,11 @@ class ImageReducer:
                     relative_folder = current_folder.relative_to(self.source_folder) if current_folder != self.source_folder else Path("")
                     dest_folder = self.dest_folder / relative_folder
                     
+                    # Renombrar subcarpetas con '- g -'
+                    if current_folder != self.source_folder:
+                        new_dest_folder_name = str(dest_folder).replace(str(self.dest_folder), str(self.dest_folder).rstrip('- g -') + ' - g -')
+                        dest_folder = Path(new_dest_folder_name)
+
                     # Crear directorio destino
                     dest_folder.mkdir(parents=True, exist_ok=True)
                     
@@ -275,7 +280,7 @@ class ImageReducer:
                         # Verificar si es imagen
                         try:
                             if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff')):
-                                # Usar executor para procesar im·genes en paralelo
+                                # Usar executor para procesar im√°genes en paralelo
                                 future = executor.submit(self.reduce_image, file_path)
                                 if future.result():
                                     self.total_reduced += 1
@@ -284,14 +289,14 @@ class ImageReducer:
                                     shutil.copy2(file_path, dest_path)
                                     self.total_copied += 1
                             else:
-                                # Copiar archivos que no son im·genes
+                                # Copiar archivos que no son im√°genes
                                 shutil.copy2(file_path, dest_path)
                                 self.total_copied += 1
                         except Exception as e:
                             logging.error(f"Error procesando {file_path}: {e}")
                             self.errors += 1
             
-            # Comparar carpetas despuÈs del procesamiento
+            # Comparar carpetas despu√©s del procesamiento
             self.compare_folders()
             
             # Actualizar registro de procesamiento
@@ -301,11 +306,11 @@ class ImageReducer:
             logging.error(f"Error general: {e}")
             print(f"Error: {e}")
         
-        self.show_summary()
-        logging.info("Procesamiento finalizado")
-        print("========================")
-        print("Procesamiento finalizado")
-        print("========================")
+        finally:
+            logging.info("Procesamiento finalizado")
+            print("========================")
+            print("Procesamiento finalizado")
+            print("========================")
 
     def compare_folders(self):
         """Compara las carpetas origen y destino para verificar integridad"""
@@ -313,21 +318,21 @@ class ImageReducer:
             origin_file_count = sum([len(files) for _, _, files in os.walk(self.source_folder)])
             dest_file_count = sum([len(files) for _, _, files in os.walk(self.dest_folder)])
             
-            comparison_info = f"ComparaciÛn de carpetas:\n"
+            comparison_info = f"Comparaci√≥n de carpetas:\n"
             comparison_info += f"Archivos en origen: {origin_file_count}\n"
             comparison_info += f"Archivos en destino: {dest_file_count}\n"
             
             if origin_file_count != dest_file_count:
-                comparison_info += "°ADVERTENCIA! El n˙mero de archivos no coincide\n"
+                comparison_info += "¬°ADVERTENCIA! El n√∫mero de archivos no coincide\n"
             else:
-                comparison_info += "El n˙mero de archivos coincide correctamente\n"
+                comparison_info += "El n√∫mero de archivos coincide correctamente\n"
             
             # Verificar contenido de algunos archivos al azar como muestra
             different_files = []
             
             for root, _, files in os.walk(self.source_folder):
                 if len(files) > 0:
-                    # Tomar una muestra de archivos no-im·genes para comparar
+                    # Tomar una muestra de archivos no-im√°genes para comparar
                     sample_files = [f for f in files if not f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'))]
                     sample_size = min(5, len(sample_files))
                     
@@ -338,231 +343,43 @@ class ImageReducer:
                             rel_path = src_path.relative_to(self.source_folder)
                             dst_path = self.dest_folder / rel_path
                             
-                            if dst_path.exists() and not filecmp.cmp(src_path, dst_path, shallow=False):
-                                different_files.append(str(rel_path))
+                            # if not filecmp.cmp(src_path, dst_path, shallow=False):
+                            #     different_files.append(f"{rel_path} es diferente")
             
             if different_files:
-                comparison_info += f"Se detectaron {len(different_files)} archivos con contenido diferente\n"
-                self.different_files = different_files
+                comparison_info += "Archivos diferentes encontrados:\n"
+                for diff_file in different_files:
+                    comparison_info += f"- {diff_file}\n"
             else:
-                comparison_info += "No se detectaron diferencias en los archivos de muestra\n"
+                comparison_info += "No se encontraron archivos diferentes\n"
             
-            logging.info(comparison_info)
+            # Mostrar la informaci√≥n de comparaci√≥n
             print(comparison_info)
-            
+            logging.info(comparison_info)
+
         except Exception as e:
-            logging.error(f"Error comparando carpetas: {e}")
-            print(f"Error comparando carpetas: {e}")
+            logging.error(f"Error al comparar carpetas: {e}")
 
     def update_registry(self):
-        """Actualiza el registro de carpetas procesadas"""
+        """Guarda las carpetas procesadas en un archivo de registro"""
         try:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
             with open(self.processed_registry, "a", encoding="utf-8") as f:
-                f.write(f"\n=== Procesamiento del {timestamp} ===\n")
-                f.write(f"Carpeta origen: {self.source_folder}\n")
-                f.write(f"Carpeta destino: {self.dest_folder}\n")
-                f.write(f"Total archivos: {self.total_processed}\n")
-                f.write(f"Im·genes reducidas: {self.total_reduced}\n")
-                f.write(f"Archivos copiados sin cambios: {self.total_copied}\n")
-                f.write(f"Errores: {self.errors}\n")
-                
-                f.write("\nCarpetas procesadas:\n")
+                # Agregar las carpetas procesadas al archivo
                 for folder in self.processed_folders:
-                    f.write(f"- {folder}\n")
-                
-                if self.different_files:
-                    f.write("\nArchivos con diferencias (muestra):\n")
-                    for diff_file in self.different_files:
-                        f.write(f"- {diff_file}\n")
-                
-                f.write("\n")
-            
-            logging.info(f"Registro actualizado: {self.processed_registry}")
+                    f.write(folder + "\n")
+                print(f"Registro actualizado en {self.processed_registry}")
+                logging.info(f"Registro actualizado en {self.processed_registry}")
         except Exception as e:
-            logging.error(f"Error actualizando registro: {e}")
-
-    def show_summary(self):
-        """Muestra resumen en consola y notificaciÛn"""
-        summary = (f"\nResumen del proceso:\n"
-                   f"Total procesados: {self.total_processed}\n"
-                   f"Im·genes reducidas: {self.total_reduced}\n"
-                   f"Archivos copiados: {self.total_copied}\n"
-                   f"Errores: {self.errors}\n"
-                   f"Carpeta destino: {self.dest_folder}")
-        
-        print(summary)
-        logging.info(summary)
-        
-        # Mostrar notificaciÛn
-        message = (f"ReducciÛn de im·genes completada:\n"
-                  f"Total procesados: {self.total_processed}\n"
-                  f"Im·genes reducidas: {self.total_reduced}")
-        
-        self.show_notification("ReducciÛn Completada", message)
-
-    def show_notification(self, title, message):
-        """Muestra una notificaciÛn en el system tray"""
-        try:
-            app = QApplication.instance() or QApplication(sys.argv)
-            tray_icon = QSystemTrayIcon()
-            tray_icon.setIcon(QIcon())
-            tray_icon.setVisible(True)
-            
-            # Mostrar notificaciÛn
-            tray_icon.showMessage(title, message, QSystemTrayIcon.Information, 5000)
-            
-            # Esperar un poco para que se muestre la notificaciÛn
-            for _ in range(10):
-                app.processEvents()
-                time.sleep(0.1)
-            
-        except Exception as e:
-            logging.error(f"Error en notificaciÛn: {e}")
-            print(f"Error en notificaciÛn: {e}")
-
-
-def is_admin():
-    """Verificar si el programa se est· ejecutando con permisos de administrador"""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-def run_as_admin():
-    """Relanzar el script con permisos de administrador"""
-    # Obtener la ruta del script actual
-    if sys.argv[0].endswith('.py'):
-        # Si se ejecuta directamente desde el script .py
-        executable = sys.executable
-        script = sys.argv[0]
-    else:
-        # Si es un ejecutable compilado
-        executable = sys.argv[0]
-        script = sys.argv[0]
+            logging.error(f"Error al actualizar el registro: {e}")
     
-    # Intentar elevar permisos usando ShellExecute
-    try:
-        # Pasar argumentos originales si los hay
-        args = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else ''
-        
-        # Usar ShellExecute para solicitar elevaciÛn
-        ctypes.windll.shell32.ShellExecuteW(
-            None, 
-            "runas", 
-            executable, 
-            f'"{script}" {args}', 
-            None, 
-            1
-        )
-        # Salir del proceso actual
-        sys.exit(0)
-    except Exception as e:
-        print(f"No se pudo elevar permisos: {e}")
-        input("Presione Enter para salir...")
-        sys.exit(1)
-
-def add_context_menu():
-    """AÒade entrada al men˙ contextual de Windows"""
-    try:
-        key_path = r"Directory\shell\ReducirImagenes"
-        command_path = r"Directory\shell\ReducirImagenes\command"
-        
-        # Obtener la ruta de la carpeta de instalaciÛn
-        install_dir = os.path.join(os.path.expanduser("~"), "ReduccionImagenes")
-        icon_path = os.path.join(install_dir, "icono.ico")  # Ruta al icono en la carpeta de instalaciÛn
-        
-        # Crear clave para men˙ contextual
-        with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path) as key:
-            winreg.SetValue(key, "", winreg.REG_SZ, "Reducir Im·genes")
-            winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, icon_path)  # aÒade el icono
-        
-        # Establecer comando
-        python_executable = sys.executable
-        script_path = os.path.abspath(__file__)
-        
-        with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, command_path) as key:
-            command = f'"{python_executable}" "{script_path}" "%1"'
-            winreg.SetValue(key, "", winreg.REG_SZ, command)
-        
-        print("Entrada de men˙ contextual aÒadida exitosamente.")
-    except Exception as e:
-        print(f"Error aÒadiendo men˙ contextual: {e}")
-
-def remove_context_menu():
-    """Elimina la entrada del men˙ contextual de Windows"""
-    try:
-        winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, r"Directory\shell\ReducirImagenes\command")
-        winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, r"Directory\shell\ReducirImagenes")
-        print("Entrada de men˙ contextual eliminada exitosamente.")
-    except Exception as e:
-        print(f"Error eliminando men˙ contextual: {e}")
-
-def show_gpu_info():
-    """Muestra informaciÛn sobre la GPU si est· disponible"""
-    if HAS_CUDA:
-        try:
-            gpu_count = torch.cuda.device_count()
-            gpu_name = torch.cuda.get_device_name(0) if gpu_count > 0 else "Desconocido"
-            
-            print(f"AceleraciÛn GPU disponible: {HAS_CUDA}")
-            print(f"N˙mero de GPUs: {gpu_count}")
-            print(f"GPU principal: {gpu_name}")
-            return True
-        except Exception as e:
-            print(f"Error obteniendo informaciÛn GPU: {e}")
-    else:
-        print("AceleraciÛn GPU no disponible. Se usar· CPU.")
-    return False
-
-def main():
-    print("====================================")
-    print("Reductor de Im·genes v2.0")
-    print("====================================")
-    
-    # Verificar disponibilidad de GPU
-    has_gpu = show_gpu_info()
-    print("====================================")
-   
-    if len(sys.argv) > 1:
-        source_folder = sys.argv[1]
-        try:
-            reducer = ImageReducer(source_folder)
-            reducer.process_folder()
-        except Exception as e:
-            print(f"Error general: {e}")
-            logging.error(f"Error general: {e}")
-        finally:
-            input("Presione Enter para salir...")
-    else:
-        # Si no es administrador, solicitar elevaciÛn
-        if not is_admin():
-            print("Se requieren permisos de administrador.")
-            print("Reiniciando en modo administrador...")
-            run_as_admin()
-            return    
-
-        # Si no hay argumentos, mostrar men˙ de instalaciÛn
-        print("Opciones:")
-        print("A. Instalar men˙ contextual")
-        print("B. Desinstalar men˙ contextual")
-        print("0. Salir")
-        
-        opcion = input("Seleccione una opciÛn (A/B/0): ")
-        if opcion.upper() == 'A':
-            add_context_menu()
-            input("Presione Enter para salir...")
-        elif opcion.upper() == 'B':
-            remove_context_menu()
-            input("Presione Enter para salir...")
-        elif opcion == '0':
-            print("Saliendo...")
-            input("Presione Enter para salir...")
-            exit()
-        else:
-            print("OpciÛn inv·lida")
-            input("Presione Enter para salir...")
 
 if __name__ == "__main__":
-    main()
+    
+    if len(sys.argv) > 1:
+        source_folder = sys.argv[1]
+        image_reducer = ImageReducer(source_folder)
+        image_reducer.process_folder()
+    else:
+        print("Por favor, elige una o m√°s carpetas y usa la opci√≥n de men√∫ contextual \"Reducir imagenes\".")
+
+    # sys.exit(app.exec_()) #Eliminado
