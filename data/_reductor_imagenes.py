@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import gc
 
 # Variable para habilitar o deshabilitar el uso de batch
-USE_BATCH = False
+USE_BATCH = True
 
 print("Iniciando reductor de imágenes...")
 
@@ -123,7 +123,7 @@ class ImageReducer:
         try:
             # Liberar memoria explícitamente antes de procesar
             gc.collect()
-            
+
             # Usar aceleración por hardware si está disponible
             if HAS_CUDA:
                 return self.reduce_image_cuda(image_path)
@@ -131,6 +131,23 @@ class ImageReducer:
                 return self.reduce_image_cpu(image_path)
         except Exception as e:
             logging.error(f"Error procesando {image_path}: {e}")
+            return False
+
+    def copy_image(self, image_path):
+        """Copia una imagen sin modificarla a la carpeta destino"""
+        try:
+            relative_path = image_path.relative_to(self.source_folder)
+            new_path = self.dest_folder / relative_path
+
+            # Crear directorios si no existen
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Copiar la imagen
+            shutil.copy2(image_path, new_path)
+            logging.info(f"Copiada sin cambios: {relative_path}")
+            return True
+        except Exception as e:
+            logging.error(f"Error copiando {image_path}: {e}")
             return False
 
     def reduce_image_cpu(self, image_path):
@@ -232,27 +249,96 @@ class ImageReducer:
             # Fallback a CPU si falla CUDA
             return self.reduce_image_cpu(image_path)
 
-    def process_images_with_batch(image_paths, batch_size):
-        """Procesa imágenes en lotes usando CUDA."""
+    def process_images_with_batch(self, image_paths, batch_size):
+        """Procesa imágenes agrupando por tamaño igual y maneja el resto individualmente."""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Usando dispositivo: {device}")
 
-        for i in range(0, len(image_paths), batch_size):
-            batch_paths = image_paths[i:i + batch_size]
-            images = []
-            for path in batch_paths:
-                try:
-                    img = Image.open(path).convert("RGB")
-                    img_tensor = transforms.ToTensor()(img)
-                    images.append(img_tensor)
-                except Exception as e:
-                    logging.error(f"Error al cargar la imagen {path}: {e}")
+        # Agrupar imágenes por tamaño igual
+        size_groups = {}
+        for path in image_paths:
+            try:
+                with Image.open(path) as img:
+                    size = img.size  # (width, height)
+                    if size not in size_groups:
+                        size_groups[size] = []
+                    size_groups[size].append(path)
+            except Exception as e:
+                logging.error(f"Error al agrupar la imagen {path}: {e}")
 
-            if images:
-                batch = torch.stack(images).to(device)
-                print(f"Procesando un lote de tamaño: {batch.size()}")
-                # Aquí puedes realizar operaciones en el lote
+        # Procesar grupos de tamaños iguales
+        for size, paths in size_groups.items():
+            if len(paths) > 1:  # Procesar en batch si hay más de una imagen del mismo tamaño
+                print(f"Procesando grupo de tamaño {size} con {len(paths)} imágenes en batch")
+                for i in range(0, len(paths), batch_size):
+                    batch_paths = paths[i:i + batch_size]
+                    images = []
+                    for path in batch_paths:
+                        try:
+                            img = Image.open(path).convert("RGB")
+                            img_tensor = transforms.ToTensor()(img)
+                            images.append((img_tensor, path))
+                        except Exception as e:
+                            logging.error(f"Error al cargar la imagen {path}: {e}")
 
+                    if images:
+                        try:
+                            batch_tensors = torch.stack([img[0] for img in images]).to(device)
+                            print(f"Procesando un lote de tamaño: {batch_tensors.size()}")
+
+                            # Calcular nueva proporción para redimensionar
+                            scale = min(1920 / size[0], 1920 / size[1])
+                            new_width = int(size[0] * scale)
+                            new_height = int(size[1] * scale)
+
+                            # Redimensionar todo el lote de una vez
+                            resized_batch = transforms.functional.resize(batch_tensors, (new_height, new_width))
+
+                            # Convertir y guardar cada imagen del lote
+                            for resized_tensor, path in zip(resized_batch, [img[1] for img in images]):
+                                try:
+                                    resized_img = transforms.ToPILImage()(resized_tensor.cpu())
+
+                                    # Guardar en nueva ubicación
+                                    relative_path = Path(path).relative_to(self.source_folder)
+                                    new_path = self.dest_folder / relative_path
+                                    new_path.parent.mkdir(parents=True, exist_ok=True)
+                                    resized_img.save(new_path, quality=90)
+                                    logging.info(f"Redimensionada (batch): {relative_path}")
+                                except Exception as e:
+                                    logging.error(f"Error procesando {path} en batch: {e}")
+                        except Exception as e:
+                            logging.error(f"Error al procesar el lote: {e}")
+            else:  # Procesar individualmente si solo hay una imagen de este tamaño
+                for path in paths:
+                    print(f"Procesando individualmente la imagen de tamaño {size}: {path}")
+                    self.reduce_image(path)
+
+    def determine_batch_size(self):
+        """Determina automáticamente el tamaño óptimo del lote basado en los recursos disponibles."""
+        try:
+            import psutil
+
+            # Obtener memoria RAM disponible en MB
+            available_memory = psutil.virtual_memory().available / (1024 * 1024)
+
+            # Estimar el tamaño promedio de una imagen en memoria (en MB)
+            average_image_size_mb = 12  # Ajustar según pruebas
+
+            # Calcular el tamaño máximo del lote basado en la memoria disponible
+            max_batch_size = int(available_memory // average_image_size_mb)
+
+            # Limitar el tamaño del lote para evitar sobrecarga
+            max_batch_size = min(max_batch_size, 4)  # Máximo 4 imágenes por lote
+
+            print(f"Memoria disponible: {available_memory:.2f} MB")
+            print(f"Tamaño de lote estimado: {max_batch_size}")
+            return max(1, max_batch_size)  # Asegurar al menos un lote
+
+        except ImportError:
+            print("psutil no está instalado. Usando tamaño de lote predeterminado de 16.")
+            return 4
+        
     def process_folder(self):
         """Procesa recursivamente la carpeta"""
         print(f"Analizando carpeta {self.source_folder}...")
@@ -271,13 +357,42 @@ class ImageReducer:
             for root, _, files in os.walk(self.source_folder):
                 for file in files:
                     if file.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff")):
-                        image_paths.append(os.path.join(root, file))
+                        image_paths.append(Path(root) / file)
+
+            if not image_paths:
+                print("No se encontraron imágenes para procesar.")
+                logging.info("No se encontraron imágenes para procesar.")
+                return
+
+            print(f"Total de imágenes encontradas: {len(image_paths)}")
+            logging.info(f"Total de imágenes encontradas: {len(image_paths)}")
+
+            start_processing_time = time.time()
 
             if USE_BATCH:
-                self.process_images_with_batch(image_paths, batch_size=16)
+                batch_size = self.determine_batch_size()
+                print(f"Tamaño de lote determinado: {batch_size}")
+                self.process_images_with_batch(image_paths, batch_size)
             else:
                 for image_path in image_paths:
-                    self.reduce_image(image_path)
+                    if not self.reduce_image(image_path):
+                        self.copy_image(image_path)
+
+            end_processing_time = time.time() - start_processing_time
+
+            print(f"Tiempo total procesando imágenes: {end_processing_time:.2f} segundos")
+            logging.info(f"Tiempo total procesando imágenes: {end_processing_time:.2f} segundos")
+
+            # Verificar imágenes no procesadas
+            processed_files = set()
+            for root, _, files in os.walk(self.dest_folder):
+                for file in files:
+                    processed_files.add(Path(root) / file)
+
+            for image_path in image_paths:
+                relative_path = self.dest_folder / image_path.relative_to(self.source_folder)
+                if relative_path not in processed_files:
+                    logging.warning(f"Imagen no procesada o copiada: {image_path}")
 
             elapsed_time = time.time() - start_time  # Fin del cálculo de tiempo
             print(f"Tiempo total transcurrido: {elapsed_time:.2f} segundos")
@@ -299,12 +414,14 @@ class ImageReducer:
     def compare_folders(self):
         """Compara las carpetas origen y destino para verificar integridad"""
         try:
-            origin_file_count = sum([len(files) for _, _, files in os.walk(self.source_folder)])
-            dest_file_count = sum([len(files) for _, _, files in os.walk(self.dest_folder)])
-
-            # Ajustar el conteo de archivos destino para ignorar el archivo de log
-            if self.log_file.exists():
-                dest_file_count -= 1
+            origin_file_count = sum(
+                len([f for f in files if f not in ["image_reduction_log.txt", "processed_folders_registry.txt"]])
+                for _, _, files in os.walk(self.source_folder)
+            )
+            dest_file_count = sum(
+                len([f for f in files if f != "image_reduction_log.txt"])
+                for _, _, files in os.walk(self.dest_folder)
+            )
 
             comparison_info = f"Comparación de carpetas:\n"
             comparison_info += f"Archivos en origen: {origin_file_count}\n"
