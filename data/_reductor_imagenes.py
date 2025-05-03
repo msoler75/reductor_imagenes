@@ -67,40 +67,45 @@ class ImageReducer:
         self.processed_folders = []
         self.different_files = []
 
+    def generate_dest_folder_name(self, folder_name, needs_processing):
+        """Genera el nombre de la carpeta destino según las reglas."""
+        if not needs_processing:
+            if folder_name.endswith("- g -"):
+                return f"{folder_name.rsplit('- g -', 1)[0].strip()} -- "
+            elif folder_name.endswith("-"):
+                return f"{folder_name.rstrip('-').strip()} -- "
+            else:
+                return f"{folder_name} -- "
+        else:
+            if folder_name.endswith("- g -"):
+                return f"{folder_name} g -"
+            elif folder_name.endswith("-"):
+                return f"{folder_name.rstrip('-').strip()} - g -"
+            else:
+                return f"{folder_name} - g -"
+
     def create_dest_folder(self):
         """Crea el nombre correcto para la carpeta de destino según las reglas"""
         folder_name = self.folder_name
-        
+
         # Verificar si la carpeta necesita procesamiento
         self.needs_processing = self.folder_contains_large_images(self.source_folder)
-        
-        # Lógica mejorada para nombrar carpetas
-        if not self.needs_processing:
-            if folder_name.endswith("- g -"):
-                # No hay imágenes para reducir y ya tiene "- g -"
-                dest_folder_name = f"{folder_name.rsplit('- g -', 1)[0].strip()} -- "
-            elif folder_name.endswith("-"):
-                # No hay imágenes y termina en guión
-                dest_folder_name = f"{folder_name.rstrip('-').strip()} -- "
-            else:
-                # No hay imágenes y no tiene formato especial
-                dest_folder_name = f"{folder_name} -- "
-        else:
-            # Hay imágenes que necesitan reducción
-            self.has_reduced_images = True
-            
-            if folder_name.endswith("- g -"):
-                # Ya tiene "- g -", añadimos otro
-                dest_folder_name = f"{folder_name} g -"
-            elif folder_name.endswith("-"):
-                # Termina en guión
-                dest_folder_name = f"{folder_name.rstrip('-').strip()} - g -"
-            else:
-                # Caso normal
-                dest_folder_name = f"{folder_name} - g -"
 
-        
+        # Generar el nombre de la carpeta destino usando la función
+        dest_folder_name = self.generate_dest_folder_name(folder_name, self.needs_processing)
         self.dest_folder = self.source_folder.parent / dest_folder_name
+
+        # Aplicar las mismas reglas a las subcarpetas
+        for root, dirs, _ in os.walk(self.source_folder):
+            for dir_name in dirs:
+                subfolder_path = Path(root) / dir_name
+                subfolder_name = subfolder_path.name
+                needs_processing = self.folder_contains_large_images(subfolder_path)
+
+                # Generar el nuevo nombre de la subcarpeta
+                new_subfolder_name = self.generate_dest_folder_name(subfolder_name, needs_processing)
+                new_subfolder_path = subfolder_path.parent / new_subfolder_name
+                subfolder_path.rename(new_subfolder_path)
 
     def folder_contains_large_images(self, folder_path):
         """Verifica si la carpeta o subcarpetas contienen imágenes grandes"""
