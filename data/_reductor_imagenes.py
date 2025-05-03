@@ -17,6 +17,8 @@ import difflib
 from concurrent.futures import ThreadPoolExecutor
 import gc
 
+# Variable para habilitar o deshabilitar el uso de batch
+USE_BATCH = False
 
 print("Iniciando reductor de imágenes...")
 
@@ -230,86 +232,64 @@ class ImageReducer:
             # Fallback a CPU si falla CUDA
             return self.reduce_image_cpu(image_path)
 
+    def process_images_with_batch(image_paths, batch_size):
+        """Procesa imágenes en lotes usando CUDA."""
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Usando dispositivo: {device}")
+
+        for i in range(0, len(image_paths), batch_size):
+            batch_paths = image_paths[i:i + batch_size]
+            images = []
+            for path in batch_paths:
+                try:
+                    img = Image.open(path).convert("RGB")
+                    img_tensor = transforms.ToTensor()(img)
+                    images.append(img_tensor)
+                except Exception as e:
+                    logging.error(f"Error al cargar la imagen {path}: {e}")
+
+            if images:
+                batch = torch.stack(images).to(device)
+                print(f"Procesando un lote de tamaño: {batch.size()}")
+                # Aquí puedes realizar operaciones en el lote
+
     def process_folder(self):
         """Procesa recursivamente la carpeta"""
         print(f"Analizando carpeta {self.source_folder}...")
         logging.info(f"Iniciando procesamiento de {self.source_folder}")
-        
-        # Verificar si realmente es necesario procesar
+
         if not self.needs_processing:
             message = f"No hay imágenes grandes para reducir en {self.source_folder}"
             print(message)
             logging.info(message)
-            # self.show_notification("Análisis Completado", message) #Eliminado
             return
-        
-        try:
-            # Contar el número total de archivos
-            total_files = sum([len(files) for _, _, files in os.walk(self.source_folder)])
-            
-            print(f"Iniciando reducción de imágenes en {self.source_folder}")
-            print(f"Total de archivos a procesar: {total_files}")
-            
-            # Usar multithreading para mejorar rendimiento
-            with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-                for root, dirs, files in os.walk(self.source_folder):
-                    # Procesar la carpeta actual
-                    current_folder = Path(root)
-                    relative_folder = current_folder.relative_to(self.source_folder) if current_folder != self.source_folder else Path("")
-                    dest_folder = self.dest_folder / relative_folder
-                    
-                    # Renombrar subcarpetas con '- g -'
-                    if current_folder != self.source_folder:
-                        new_dest_folder_name = str(dest_folder).replace(str(self.dest_folder), str(self.dest_folder).rstrip('- g -') + ' - g -')
-                        dest_folder = Path(new_dest_folder_name)
 
-                    # Crear directorio destino
-                    dest_folder.mkdir(parents=True, exist_ok=True)
-                    
-                    # Registrar carpeta procesada
-                    self.processed_folders.append(str(relative_folder))
-                    
-                    # Procesar archivos
-                    for file in files:
-                        self.total_processed += 1
-                        
-                        file_path = current_folder / file
-                        dest_path = dest_folder / file
-                        
-                        # Calcular y mostrar el porcentaje de progreso
-                        progress = (self.total_processed / total_files) * 100
-                        if self.total_processed % 10 == 0 or self.total_processed == total_files:
-                            print(f"Progreso: {progress:.2f}% ({self.total_processed}/{total_files})")
-                        
-                        # Verificar si es imagen
-                        try:
-                            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff')):
-                                # Usar executor para procesar imágenes en paralelo
-                                future = executor.submit(self.reduce_image, file_path)
-                                if future.result():
-                                    self.total_reduced += 1
-                                else:
-                                    # Copiar imagen sin cambios
-                                    shutil.copy2(file_path, dest_path)
-                                    self.total_copied += 1
-                            else:
-                                # Copiar archivos que no son imágenes
-                                shutil.copy2(file_path, dest_path)
-                                self.total_copied += 1
-                        except Exception as e:
-                            logging.error(f"Error procesando {file_path}: {e}")
-                            self.errors += 1
-            
-            # Comparar carpetas después del procesamiento
+        try:
+            start_time = time.time()  # Inicio del cálculo de tiempo
+
+            image_paths = []
+            for root, _, files in os.walk(self.source_folder):
+                for file in files:
+                    if file.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff")):
+                        image_paths.append(os.path.join(root, file))
+
+            if USE_BATCH:
+                self.process_images_with_batch(image_paths, batch_size=16)
+            else:
+                for image_path in image_paths:
+                    self.reduce_image(image_path)
+
+            elapsed_time = time.time() - start_time  # Fin del cálculo de tiempo
+            print(f"Tiempo total transcurrido: {elapsed_time:.2f} segundos")
+            logging.info(f"Tiempo total transcurrido: {elapsed_time:.2f} segundos")
+
             self.compare_folders()
-            
-            # Actualizar registro de procesamiento
             self.update_registry()
-            
+
         except Exception as e:
             logging.error(f"Error general: {e}")
             print(f"Error: {e}")
-        
+
         finally:
             logging.info("Procesamiento finalizado")
             print("========================")

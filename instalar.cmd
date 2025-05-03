@@ -111,9 +111,9 @@ mkdir "%INSTALL_DIR%" 2>nul
 :: Copiar script principal y archivos adicionales necesarios al directorio de instalacion
 echo Copiando archivos...
 copy "%~dp0data\icono.ico" "%INSTALL_DIR%\icono.ico"
-copy "%~dp0data\reductor_imagenes.py" "%INSTALL_DIR%\reductor_imagenes.py"
-copy "%~dp0data\menu_agregar.py" "%INSTALL_DIR%\menu_agregar.py"
-copy "%~dp0data\menu_remover.py" "%INSTALL_DIR%\menu_remover.py"
+copy "%~dp0data\_reductor_imagenes.py" "%INSTALL_DIR%\reductor_imagenes.py"
+copy "%~dp0data\_menu_agregar.py" "%INSTALL_DIR%\menu_agregar.py"
+copy "%~dp0data\_menu_remover.py" "%INSTALL_DIR%\menu_remover.py"
 copy "%~dp0leeme.txt" "%INSTALL_DIR%\leeme.txt"
 
 :: Crear script iniciar_reductor.cmd con menú interactivo y funcionalidad adicional:
