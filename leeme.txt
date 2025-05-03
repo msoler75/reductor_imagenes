@@ -19,14 +19,14 @@ Se instala mediante un comando de tipo PowerShell. Este script se encarga de ins
 
 ### 1. Procesamiento de Imágenes
 - **Reducción de tamaño**: Redimensionar imágenes mayores a 1920px (sea por ancho o por alto que supere esa dimensión) manteniendo proporción
-- **Formatos soportados**: JPG, PNG, GIF, BMP, TIF, Convirtiendo todas las imágenes a JPG cuando sea necesario
+- **Formatos soportados**: JPG, PNG, GIF, BMP, TIF
 - **Aceleración por hardware**: Implementar soporte para GPU NVIDIA mediante CUDA, si está disponible
-- **Manejo de errores de memoria**: Implementar fallback progresivo para imágenes problemáticas. En tal caso se utilizará el método de reducción de progresivo.
+- **Manejo de errores de memoria**: Implementar fallback progresivo para imágenes problemáticas. En tal caso se utilizará el método de reducción progresivo.
 - **Procesamiento en paralelo**: Utilizar multithreading para optimizar rendimiento
 
 ### 2. Gestión de Carpetas
-- **Detección inteligente**: Solo se procesarán las imagenes que superen la dimensión 1980 sea por alto o por ancho. El resto de documentos se copiarán sin cambios.
-- **Creación de carpetas copia destino**: Se creará una carpeta con el mismo nombre que la carpeta origen pero añadiendole "- g -" al final. Mantendrá la estructura original de la carpeta con sus subcarpetas.
+- **Detección inteligente**: Solo se procesarán las imágenes que superen la dimensión 1920px sea por alto o por ancho. El resto de documentos se copiarán sin cambios.
+- **Creación de carpetas copia destino**: Se creará una carpeta con el mismo nombre que la carpeta origen pero añadiéndole "- g -" al final. Mantendrá la estructura original de la carpeta con sus subcarpetas.
 - Las subcarpetas, en la nueva destinación, también se les añadirá el sufijo "- g -".
 - **Nomenclatura de carpetas destino**:
   - Carpeta normal → Añadir "- g -" (ej: "Fotos" → "Fotos - g -")
@@ -37,7 +37,6 @@ Se instala mediante un comando de tipo PowerShell. Este script se encarga de ins
 
 ### 3. Características de la Interfaz
 - **Menú contextual de Windows**: Integración con clic derecho en carpetas
-- **Notificaciones**: Mostrar notificaciones en tray icon de Windows sobre progreso y finalización
 - **Consola de progreso**: Indicar porcentaje de avance durante el procesamiento
 - **Informes de resultados**: Mostrar estadísticas al finalizar (archivos procesados, reducidos, errores)
 
@@ -51,7 +50,7 @@ Se instala mediante un comando de tipo PowerShell. Este script se encarga de ins
 ### Requerimientos de Sistema
 - Windows (7/8/10/11)
 - Python 3.6+
-- Dependencias: Pillow, PyQt5
+- Dependencias: Pillow
 - Opcional: PyTorch/CUDA para aceleración GPU
 
 ### Estructura del Instalador
@@ -76,7 +75,7 @@ Se instala mediante un comando de tipo PowerShell. Este script se encarga de ins
 3. Si contiene imágenes grandes:
    - Crea carpeta destino con nomenclatura adecuada
    - Procesa y reduce imágenes, copia el resto de archivos
-   - Muestra progreso y notificaciones
+   - Muestra progreso en consola
 4. Si no contiene imágenes grandes:
    - Informa al usuario que no es necesario reducir
    - Crea carpeta destino con nomenclatura "--"

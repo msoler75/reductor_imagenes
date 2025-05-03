@@ -17,6 +17,10 @@ import difflib
 from concurrent.futures import ThreadPoolExecutor
 import gc
 
+
+print("Iniciando reductor de imágenes...")
+
+
 # Corregir la advertencia de depreciación usando la constante actualizada
 try:
     from PIL import Image
@@ -317,42 +321,20 @@ class ImageReducer:
         try:
             origin_file_count = sum([len(files) for _, _, files in os.walk(self.source_folder)])
             dest_file_count = sum([len(files) for _, _, files in os.walk(self.dest_folder)])
-            
+
+            # Ajustar el conteo de archivos destino para ignorar el archivo de log
+            if self.log_file.exists():
+                dest_file_count -= 1
+
             comparison_info = f"Comparación de carpetas:\n"
             comparison_info += f"Archivos en origen: {origin_file_count}\n"
             comparison_info += f"Archivos en destino: {dest_file_count}\n"
-            
+
             if origin_file_count != dest_file_count:
                 comparison_info += "¡ADVERTENCIA! El número de archivos no coincide\n"
             else:
                 comparison_info += "El número de archivos coincide correctamente\n"
-            
-            # Verificar contenido de algunos archivos al azar como muestra
-            different_files = []
-            
-            for root, _, files in os.walk(self.source_folder):
-                if len(files) > 0:
-                    # Tomar una muestra de archivos no-imágenes para comparar
-                    sample_files = [f for f in files if not f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'))]
-                    sample_size = min(5, len(sample_files))
-                    
-                    for i in range(sample_size):
-                        if i < len(sample_files):
-                            file = sample_files[i]
-                            src_path = Path(root) / file
-                            rel_path = src_path.relative_to(self.source_folder)
-                            dst_path = self.dest_folder / rel_path
-                            
-                            # if not filecmp.cmp(src_path, dst_path, shallow=False):
-                            #     different_files.append(f"{rel_path} es diferente")
-            
-            if different_files:
-                comparison_info += "Archivos diferentes encontrados:\n"
-                for diff_file in different_files:
-                    comparison_info += f"- {diff_file}\n"
-            else:
-                comparison_info += "No se encontraron archivos diferentes\n"
-            
+
             # Mostrar la información de comparación
             print(comparison_info)
             logging.info(comparison_info)
@@ -374,12 +356,27 @@ class ImageReducer:
     
 
 if __name__ == "__main__":
+    import time  # Importar para usar pausas
+    print("Inicio del programa")
     
+    if HAS_CUDA:
+        print("CUDA está disponible. Se utilizará para la reducción de imágenes.")
+    else:
+        print("CUDA no está disponible. Se utilizará la CPU para la reducción de imágenes.")
+
     if len(sys.argv) > 1:
         source_folder = sys.argv[1]
+        print(f"Carpeta fuente recibida: {source_folder}")
+
+        if not os.path.exists(source_folder):
+            print(f"Error: La carpeta {source_folder} no existe.")
+            sys.exit(1)
+        
         image_reducer = ImageReducer(source_folder)
+        print("Instancia de ImageReducer creada")
+
         image_reducer.process_folder()
+        print("Procesamiento de carpeta completado")
     else:
         print("Por favor, elige una o más carpetas y usa la opción de menú contextual \"Reducir imagenes\".")
 
-    # sys.exit(app.exec_()) #Eliminado

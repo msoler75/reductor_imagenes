@@ -90,7 +90,7 @@ if %errorlevel% equ 0 (
     echo Tarjeta NVIDIA detectada. Instalando soporte para aceleracion GPU...
     
     :: Instalar PyTorch con soporte CUDA
-    python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
     
     if %errorlevel% equ 0 (
         echo Soporte para GPU instalado correctamente.
@@ -103,7 +103,6 @@ if %errorlevel% equ 0 (
 
 :: Instalar otras dependencias adicionales si es necesario (opcional)
 echo Instalando dependencias adicionales...
-python -m pip install gc filecmp difflib
 
 :: Crear directorio de instalacion en el perfil del usuario
 set "INSTALL_DIR=%USERPROFILE%\ReduccionImagenes"

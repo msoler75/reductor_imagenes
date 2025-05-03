@@ -56,8 +56,8 @@ def add_context_menu():
             print(f"Error: No se encuentra el archivo {cmd_path}")
             return False
         
-        # Comando para ejecutar al hacer clic en menú contextual
-        command = f'cmd.exe /c "{cmd_path}" "%1"'
+        # Ajuste para manejar correctamente los argumentos con espacios
+        command = f'cmd.exe /c {cmd_path} "%1\"'
         
         # Verificar si existe un icono en la carpeta de instalación
         icon_path = os.path.join(script_dir, "icono.ico")
