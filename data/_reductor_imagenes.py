@@ -92,7 +92,15 @@ class ImageReducer:
 
         # Generar el nombre de la carpeta destino usando la función
         dest_folder_name = self.generate_dest_folder_name(folder_name, self.needs_processing)
-        self.dest_folder = self.source_folder.parent / dest_folder_name
+
+
+        # CORRECCIÓN: Asegurarse de que la ruta no tenga barras dobles
+        self.dest_folder = Path((self.source_folder.parent / dest_folder_name).as_posix())
+
+        # eliminar espacios al final
+        self.dest_folder = self.dest_folder.with_name(self.dest_folder.name.rstrip())
+
+        # self.dest_folder = self.source_folder.parent / dest_folder_name
 
         # Aplicar las mismas reglas a las subcarpetas
         for root, dirs, _ in os.walk(self.source_folder):
