@@ -1,3 +1,6 @@
+# Disclaimer
+Este proyecto es de carácter personal y no está destinado para uso comercial ni distribución masiva.
+
 # Especificación Técnica: Reductor de Imágenes
 
 ## Descripción General

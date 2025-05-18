@@ -1,0 +1,12 @@
+Iniciando reductor de imágenes...
+Inicio del programa
+CUDA está disponible. Se utilizará para la reducción de imágenes.
+Carpeta fuente recibida: D:\2022 -Ordenadores-
+Instancia de ImageReducer creada
+Analizando carpeta D:\2022 -Ordenadores-...
+Error: expected str, bytes or os.PathLike object, not ImageReducer
+========================
+Procesamiento finalizado
+========================
+Procesamiento de carpeta completado
+Presione una tecla para continuar . . .
