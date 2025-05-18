@@ -13,14 +13,8 @@ import difflib
 from concurrent.futures import ThreadPoolExecutor
 import gc
 
-# Variable para habilitar o deshabilitar el uso de batch
-USE_BATCH = True
-
 # Variable para habilitar o deshabilitar el uso de multihilo
-USE_MULTITHREAD = False
-
-# Variable para habilitar o deshabilitar el uso de CUDA
-HAS_CUDA = False
+USE_MULTITHREAD = True
 
 print("Iniciando reductor de imágenes...")
 
@@ -31,22 +25,6 @@ try:
 except:
     # Fallback para versiones muy antiguas
     RESAMPLING_METHOD = Image.ANTIALIAS
-
-# Para aceleración por hardware NVIDIA (si está disponible)
-# Ahora la detección de CUDA se hace en la instalación y se guarda en config.txt
-
-# try:
-    # import torch
-    # import torchvision.transforms as transforms
-    # Leer config.txt para saber si se debe usar CUDA
-    # config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.txt')
-    # if os.path.exists(config_path):
-      #  with open(config_path, 'r', encoding='utf-8') as f:
-       #     for line in f:
-        #        if line.strip().startswith('USE_CUDA='):
-         #           HAS_CUDA = line.strip().split('=')[1] == '1'
-#except ImportError:
- #   HAS_CUDA = False
 
 class ImageReducer:
     def __init__(self, source_folder):
@@ -102,7 +80,15 @@ class ImageReducer:
         folder_name = self.folder_name
 
         # Verificar si la carpeta necesita procesamiento
+
+        print(f"Verificando si la carpeta tiene imagenes grandes...")
         self.needs_processing = self.folder_contains_large_images(self.source_folder)
+
+        # solo muestra si hay imagenes grandes y detiene el proceso
+        # print(f"Carpeta {self.source_folder} necesita procesamiento: {self.needs_processing}")
+        # logging.info(f"Carpeta {self.source_folder} necesita procesamiento: {self.needs_processing}")
+        # Termina el proceso aqui
+        # exit(0)
 
         # Generar el nombre de la carpeta destino usando la función
         dest_folder_name = self.generate_dest_folder_name(folder_name, self.needs_processing)
@@ -129,37 +115,63 @@ class ImageReducer:
                 # No renombrar las carpetas, solo registrar el nombre para uso futuro
                 # subfolder_path.rename(new_subfolder_path)
 
-    def folder_contains_large_images(self, folder_path):
-        """Verifica si la carpeta o subcarpetas contienen imágenes grandes"""
+    def _get_large_images(self, folder_path, max_size=1920, first_only=False, print_found=True):
+        """Devuelve una lista de imágenes grandes (o la primera si first_only=True), sin multihilo. Muestra en consola cada archivo comprobado. Si print_found=False, no imprime el mensaje [ENCONTRADA]."""
+        image_files = []
         for root, _, files in os.walk(folder_path):
             for file in files:
-                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff')):
-                    file_path = Path(root) / file
-                    try:
-                        with Image.open(file_path) as img:
-                            width, height = img.size
-                            if width > 1920 or height > 1920:
-                                return True
-                    except Exception as e:
-                        # Ignorar errores al verificar
-                        pass
-        return False
+                if file.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff")):
+                    image_files.append(Path(root) / file)
+        if not image_files:
+            return [] if not first_only else (None, None)
+        resultados = []
+        errores = []
+        def check_image(image_path):
+            # print(f"[CHECK] Comprobando tamaño de: {image_path}")
+            try:
+                with Image.open(image_path) as img:
+                    width, height = img.size
+                    if width > max_size or height > max_size:
+                        if print_found:
+                            print(f"[ENCONTRADA] Imagen grande: {image_path} ({width}x{height})")
+                        return (image_path, (width, height))
+            except Exception as e:
+                errores.append((image_path, str(e)))
+            return None
+        for path in image_files:
+            result = check_image(path)
+            if result:
+                if first_only:
+                    return result
+                resultados.append(result)
+        if errores:
+            print(f"[ADVERTENCIA] No se pudieron abrir {len(errores)} imágenes:")
+            for path, err in errores:
+                print(f"  - {path}: {err}")
+        if first_only:
+            # Si no se encontró ninguna imagen grande, devolver (None, None)
+            return (None, None)
+        return resultados
+
+    def folder_contains_large_images(self, folder_path):
+        """Devuelve True si hay al menos una imagen grande en la carpeta o subcarpetas. No imprime mensaje [ENCONTRADA]."""
+        result = self._get_large_images(folder_path, first_only=True, print_found=False)
+        return result[0] is not None
+
+    def find_large_image(self, folder_path, max_size=1920):
+        """Devuelve la primera imagen grande encontrada y su tamaño, o (None, None) si no hay. Imprime mensaje [ENCONTRADA]."""
+        return self._get_large_images(folder_path, max_size=max_size, first_only=True, print_found=True)
 
     def reduce_image(self, image_path):
-        """Redimensiona una imagen si es necesario, con soporte para GPU si está disponible"""
+        """Redimensiona una imagen si es necesario y muestra en consola cuál está procesando"""
         try:
-            # Liberar memoria explícitamente antes de procesar
+            # print(f"[REDUCIENDO] Procesando imagen: {image_path}")
             gc.collect()
-
             # Si la imagen ya fue procesada exitosamente, saltar
             if str(image_path) in self.processed_images:
                 return True
 
-            # Usar aceleración por hardware si está disponible
-            if HAS_CUDA:
-                result = self.reduce_image_cuda(image_path)
-            else:
-                result = self.reduce_image_cpu(image_path)
+            result = self.reduce_image_cpu(image_path)
                 
             # Registrar el resultado
             if result:
@@ -254,200 +266,6 @@ class ImageReducer:
             logging.error(f"Error CPU procesando {image_path}: {e}")
             return False
 
-    def reduce_image_cuda(self, image_path):
-        """Redimensiona una imagen usando GPU CUDA"""
-        try:
-            # Abrir la imagen con PIL primero para verificar dimensiones
-            with Image.open(image_path) as pil_img:
-                width, height = pil_img.size
-                
-                # Condición para redimensionar
-                if width > 1920 or height > 1920:
-                    # Procesamiento con GPU
-                    img = Image.open(image_path).convert('RGB')
-                    
-                    # Convertir a tensor
-                    tensor = transforms.ToTensor()(img).unsqueeze(0)
-                    
-                    # Mover a GPU
-                    if torch.cuda.is_available():
-                        tensor = tensor.cuda()
-                    
-                    # Calcular nueva proporción
-                    scale = min(1920 / width, 1920 / height)
-                    new_width = int(width * scale)
-                    new_height = int(height * scale)
-                    
-                    # Redimensionar usando GPU
-                    resized = transforms.functional.resize(tensor, (new_height, new_width))
-                    
-                    # Mover de vuelta a CPU y convertir a PIL
-                    resized = resized.squeeze(0).cpu()
-                    resized_img = transforms.ToPILImage()(resized)
-                    
-                    # Guardar en nueva ubicación
-                    relative_path = image_path.relative_to(self.source_folder)
-                    new_path = self.dest_folder / relative_path
-                    
-                    # Crear directorios si no existen
-                    new_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    # Guardar la imagen
-                    resized_img.save(new_path, quality=90)
-                    logging.info(f"Redimensionada (CUDA): {relative_path}")
-                    
-                    # Limpiar memoria GPU
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    
-                    return True
-                else:
-                    # La imagen no necesita ser redimensionada, copiarla tal cual
-                    self.copy_image(image_path)
-                    return True
-        except Exception as e:
-            logging.error(f"Error CUDA procesando {image_path}: {e}")
-            # Fallback a CPU si falla CUDA
-            return self.reduce_image_cpu(image_path)
-
-    def process_images_with_batch(self, image_paths, batch_size):
-        """Procesa imágenes agrupando por tamaño igual y maneja el resto individualmente."""
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Usando dispositivo: {device}")
-
-        # Agrupar imágenes por tamaño igual
-        size_groups = {}
-        failed_to_open = []
-        
-        for path in image_paths:
-            try:
-                with Image.open(path) as img:
-                    size = img.size  # (width, height)
-                    if size not in size_groups:
-                        size_groups[size] = []
-                    size_groups[size].append(path)
-            except Exception as e:
-                logging.error(f"Error al agrupar la imagen {path}: {e}")
-                failed_to_open.append(path)
-
-        # Procesar grupos de tamaños iguales
-        for size, paths in size_groups.items():
-            width, height = size
-            # Verificar si necesitan ser redimensionadas
-            need_resizing = width > 1920 or height > 1920
-            
-            if len(paths) > 1 and need_resizing:  # Procesar en batch si hay más de una imagen del mismo tamaño y necesitan redimensión
-                print(f"Procesando grupo de tamaño {size} con {len(paths)} imágenes en batch")
-                for i in range(0, len(paths), batch_size):
-                    batch_paths = paths[i:i + batch_size]
-                    images = []
-                    skipped_paths = []
-                    
-                    for path in batch_paths:
-                        try:
-                            if str(path) in self.processed_images:
-                                continue  # Saltar si ya fue procesada
-                                
-                            img = Image.open(path).convert("RGB")
-                            img_tensor = transforms.ToTensor()(img)
-                            images.append((img_tensor, path))
-                        except Exception as e:
-                            logging.error(f"Error al cargar la imagen {path}: {e}")
-                            skipped_paths.append(path)
-
-                    if images:
-                        try:
-                            batch_tensors = torch.stack([img[0] for img in images]).to(device)
-                            
-                            # Calcular nueva proporción para redimensionar
-                            scale = min(1920 / size[0], 1920 / size[1])
-                            new_width = int(size[0] * scale)
-                            new_height = int(size[1] * scale)
-
-                            # Redimensionar todo el lote de una vez
-                            resized_batch = transforms.functional.resize(batch_tensors, (new_height, new_width))
-
-                            for idx, (resized_tensor, path) in enumerate(zip(resized_batch, [img[1] for img in images])):
-                                try:
-                                    resized_img = transforms.ToPILImage()(resized_tensor.cpu())
-
-                                    # Asegurarse de usar Path para manejar rutas correctamente
-                                    path_obj = Path(path) if not isinstance(path, Path) else path
-                                    relative_path = path_obj.relative_to(self.source_folder)
-                                    new_path = self.dest_folder / relative_path
-                                    new_path.parent.mkdir(parents=True, exist_ok=True)
-                                    resized_img.save(new_path, quality=90)
-                                    logging.info(f"Redimensionada (batch): {relative_path}")
-                                    self.processed_images.add(str(path))
-                                    self.total_reduced += 1
-                                except Exception as e:
-                                    logging.error(f"Error procesando {path} en batch: {e}")
-                                    skipped_paths.append(path)
-                        except Exception as e:
-                            logging.error(f"Error al procesar el lote: {e}")
-                            # Añadir todas las imágenes del lote a skipped_paths si falla todo el lote
-                            skipped_paths.extend([img[1] for img in images])
-                    
-                    # Procesar individualmente las imágenes que no se pudieron procesar en batch
-                    for path in skipped_paths:
-                        print(f"Procesando individualmente la imagen que falló en batch: {path}")
-                        self.reduce_image(path)
-            else:  
-                # Procesar individualmente si solo hay una imagen de este tamaño o no necesitan redimensión
-                for path in paths:
-                    # Verificamos si necesita ser redimensionada
-                    if need_resizing:
-                        print(f"Procesando individualmente la imagen de tamaño {size}: {path}")
-                        self.reduce_image(path)
-                    else:
-                        # Si no necesita redimensión, la copiamos directamente
-                        self.copy_image(path)
-        
-        # Procesar las imágenes que fallaron al abrir para la agrupación
-        for path in failed_to_open:
-            print(f"Intentando procesar individualmente la imagen que falló al abrir: {path}")
-            self.reduce_image(path)
-
-    def determine_batch_size(self):
-        """Determina automáticamente el tamaño óptimo del lote basado en los recursos disponibles."""
-        try:
-            import psutil
-
-            # Obtener memoria RAM disponible en MB
-            available_memory = psutil.virtual_memory().available / (1024 * 1024)
-
-            # Estimar el tamaño promedio de una imagen en memoria (en MB)
-            average_image_size_mb = 12  # Ajustar según pruebas
-
-            # Calcular el tamaño máximo del lote basado en la memoria disponible
-            max_batch_size = int(available_memory // average_image_size_mb)
-
-            # Limitar el tamaño del lote para evitar sobrecarga
-            max_batch_size = min(max_batch_size, 4)  # Máximo 4 imágenes por lote
-
-            print(f"Memoria disponible: {available_memory:.2f} MB")
-            print(f"Tamaño de lote estimado: {max_batch_size}")
-            return max(1, max_batch_size)  # Asegurar al menos un lote
-
-        except ImportError:
-            print("psutil no está instalado. Usando tamaño de lote predeterminado de 4.")
-            return 4
-        
-    def find_large_image(self, source_folder, max_size=1920):
-        for root, _, files in os.walk(source_folder):
-            for file in files:
-                if file.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff")):
-                    image_path = Path(root) / file
-                    try:
-                        with Image.open(image_path) as img:
-                            width, height = img.size
-                            if width > max_size or height > max_size:
-                                return image_path, (width, height)
-                    except Exception as e:
-                        print(f"No se pudo abrir la imagen {image_path}: {e}")
-        print("No se encontró ninguna imagen que supere el tamaño indicado.")
-        return None, None
-        
     def process_folder(self):
         """Procesa recursivamente la carpeta"""
         print(f"Analizando carpeta {self.source_folder}...")
@@ -493,20 +311,11 @@ class ImageReducer:
 
             start_processing_time = time.time()
 
-            if USE_BATCH and HAS_CUDA:
-                batch_size = self.determine_batch_size()
-                print(f"Tamaño de lote determinado: {batch_size}")
-                self.process_images_with_batch(image_paths, batch_size)
-                
-                # Verificar y procesar cualquier imagen que no haya sido procesada
-                self.process_missed_images(image_paths)
-            elif USE_MULTITHREAD:
-                # Procesamiento multihilo usando ThreadPoolExecutor
+            if USE_MULTITHREAD:
                 from concurrent.futures import ThreadPoolExecutor, as_completed
                 import multiprocessing
                 max_workers = min(32, (multiprocessing.cpu_count() or 1) + 4)
                 print(f"Procesando imágenes en paralelo con {max_workers} hilos...")
-                processed_count = 0
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_path = {executor.submit(self.reduce_image, image_path): image_path for image_path in image_paths}
                     for i, future in enumerate(as_completed(future_to_path), start=1):
@@ -556,20 +365,6 @@ class ImageReducer:
             print("========================")
             print("Procesamiento finalizado")
             print("========================")
-
-    def process_missed_images(self, image_paths):
-        """Procesa cualquier imagen que no haya sido procesada en batch"""
-        missed_images = []
-        for path in image_paths:
-            if str(path) not in self.processed_images:
-                missed_images.append(path)
-        
-        if missed_images:
-            print(f"Procesando {len(missed_images)} imágenes que no fueron procesadas en batch:")
-            for path in missed_images:
-                print(f"Procesando imagen faltante: {path}")
-                if not self.reduce_image(path):
-                    self.copy_image(path)
 
     def verify_processed_images(self, image_paths):
         """Verifica que todas las imágenes hayan sido procesadas correctamente"""
@@ -647,24 +442,24 @@ class ImageReducer:
 if __name__ == "__main__":
     import time  # Importar para usar pausas
     print("Inicio del programa")
-    
-    if HAS_CUDA:
-        print("CUDA está disponible. Se utilizará para la reducción de imágenes.")
-    else:
-        print("CUDA no está disponible. Se utilizará la CPU para la reducción de imágenes.")
 
-    if len(sys.argv) > 1:
-        source_folder = sys.argv[1]
-        print(f"Carpeta fuente recibida: {source_folder}")
+    try:
+        if len(sys.argv) > 1:
+            source_folder = sys.argv[1]
+            print(f"Carpeta: {source_folder}")
 
-        if not os.path.exists(source_folder):
-            print(f"Error: La carpeta {source_folder} no existe.")
-            sys.exit(1)
-        
-        image_reducer = ImageReducer(source_folder)
-        print("Instancia de ImageReducer creada")
+            if not os.path.exists(source_folder):
+                print(f"Error: La carpeta {source_folder} no existe.")
+                sys.exit(1)
+            
+            image_reducer = ImageReducer(source_folder)
+            print("Instancia de ImageReducer creada")
 
-        image_reducer.process_folder()
-        print("Procesamiento de carpeta completado")
-    else:
-        print("Por favor, elige una o más carpetas y usa la opción de menú contextual \"Reducir imagenes\".")
+            image_reducer.process_folder()
+            print("Procesamiento de carpeta completado")
+        else:
+            print("Por favor, elige una o más carpetas y usa la opción de menú contextual \"Reducir imagenes\".")
+    except KeyboardInterrupt:
+        print("\nProceso interrumpido por el usuario.")
+        logging.info("Proceso interrumpido por el usuario.")
+        sys.exit(130)

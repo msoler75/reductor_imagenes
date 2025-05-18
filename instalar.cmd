@@ -82,26 +82,6 @@ echo Instalando dependencias basicas...
 python -m pip install --upgrade pip
 python -m pip install Pillow PyQt5
 
-:: Instalar dependencias para aceleracion GPU
-echo.
-echo Verificando tarjeta grafica NVIDIA para aceleracion...
-nvidia-smi >nul 2>&1
-if %errorlevel% equ 0 (
-    echo Tarjeta NVIDIA detectada. Instalando soporte para aceleracion GPU...
-    
-    :: Instalar PyTorch con soporte CUDA
-    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-    
-    if %errorlevel% equ 0 (
-        echo Soporte para GPU instalado correctamente.
-    ) else (
-        echo No se pudo instalar el soporte para GPU. Se usara CPU para procesar imagenes.
-    )
-) else (
-    echo No se detecto tarjeta NVIDIA compatible. Se usara CPU para procesar imagenes.
-)
-
-:: Instalar otras dependencias adicionales si es necesario (opcional)
 echo Instalando dependencias adicionales...
 
 :: Crear directorio de instalacion en el perfil del usuario
